@@ -1,0 +1,6 @@
+[project]
+name = "tmall-attendance-backend"
+version = "0.1.0"
+description = "天猫商城员工考勤管理系统 - 后端占位工程"
+requires-python = ">=3.10"
+dependencies = []
