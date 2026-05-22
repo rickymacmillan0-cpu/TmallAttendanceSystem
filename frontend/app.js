@@ -4,13 +4,30 @@
  */
 
 const STORAGE_KEY = "tmall_attendance_api_base";
+const DEFAULT_API_BASE = "http://127.0.0.1:8000";
+
+function normalizeApiBase(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return DEFAULT_API_BASE;
+
+  try {
+    const url = new URL(raw);
+    if (url.port === "5500" || url.port === "5173" || url.port === "3000") return DEFAULT_API_BASE;
+    if (url.pathname === "/" || url.pathname === "") return url.origin;
+    if (url.pathname.startsWith("/docs") || url.pathname.startsWith("/redoc") || url.pathname.startsWith("/openapi.json")) {
+      return url.origin;
+    }
+  } catch {
+    return raw.replace(/\/$/, "");
+  }
+
+  return raw.replace(/\/$/, "");
+}
 
 function getApiBase() {
   const input = document.getElementById("apiBase");
   const fromStorage = localStorage.getItem(STORAGE_KEY);
-  const fallback = "http://127.0.0.1:8000";
-  const v = (input.value || fromStorage || fallback).replace(/\/$/, "");
-  return v;
+  return normalizeApiBase(input.value || fromStorage || DEFAULT_API_BASE);
 }
 
 function setApiStatus(msg, ok = true) {
@@ -57,7 +74,7 @@ async function apiFetch(path, options = {}) {
     data = { detail: text || res.statusText };
   }
   if (!res.ok) {
-    const detail = data?.detail ?? data?.message ?? text || res.statusText;
+    const detail = data?.detail ?? data?.message ?? (text || res.statusText);
     const err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
     err.status = res.status;
     err.body = data;
@@ -96,9 +113,13 @@ function formatRange(startAt, endAt) {
 }
 
 async function loadEmployeesAndDepartments() {
+  const empSelect = document.getElementById("empSelect");
+  const deptFilter = document.getElementById("deptFilter");
+  empSelect.innerHTML = `<option value="">正在连接后端...</option>`;
+  deptFilter.innerHTML = `<option value="">正在加载部门...</option>`;
+
   const [emps, depts] = await Promise.all([apiFetch("/employees"), apiFetch("/departments")]);
 
-  const empSelect = document.getElementById("empSelect");
   empSelect.innerHTML = emps.length
     ? emps
         .map(
@@ -112,7 +133,6 @@ async function loadEmployeesAndDepartments() {
     document.getElementById("empIdInput").value = String(emps[0].emp_id);
   }
 
-  const deptFilter = document.getElementById("deptFilter");
   const first = `<option value="">全公司待审批</option>`;
   deptFilter.innerHTML =
     first +
@@ -123,16 +143,23 @@ async function loadEmployeesAndDepartments() {
 
 async function loadMyHistory() {
   const empId = currentEmpId();
+  const empty = document.getElementById("historyEmpty");
   if (!empId || Number.isNaN(empId)) {
-    showToast("请先选择或填写 emp_id", false);
+    const msg = "请先选择或填写 emp_id";
+    empty.textContent = msg;
+    empty.classList.remove("hidden");
+    showToast(msg, false);
     return;
   }
+  empty.textContent = `正在加载 emp_id=${empId} 的请假历史...`;
+  empty.classList.remove("hidden");
   const rows = await apiFetch(`/leave-applications?emp_id=${empId}&limit=200`);
   const tbody = document.getElementById("historyBody");
-  const empty = document.getElementById("historyEmpty");
   tbody.innerHTML = "";
   if (!rows.length) {
+    empty.textContent = `emp_id=${empId} 暂无请假记录`;
     empty.classList.remove("hidden");
+    setApiStatus(`后端连接正常；emp_id=${empId} 历史记录 0 条`, true);
     return;
   }
   empty.classList.add("hidden");
@@ -146,6 +173,7 @@ async function loadMyHistory() {
       <td class="px-3 py-2">${statusBadge(r.approval_status)}</td>`;
     tbody.appendChild(tr);
   }
+  setApiStatus(`后端连接正常；emp_id=${empId} 历史记录 ${rows.length} 条`, true);
 }
 
 async function loadPending() {
@@ -194,17 +222,26 @@ async function reviewApplication(applicationId, status) {
 
 function wireEvents() {
   document.getElementById("saveApiBase").addEventListener("click", () => {
-    const v = document.getElementById("apiBase").value.trim().replace(/\/$/, "");
+    const v = normalizeApiBase(document.getElementById("apiBase").value);
+    document.getElementById("apiBase").value = v;
     localStorage.setItem(STORAGE_KEY, v);
     showToast("已保存 API 地址", true);
-    setApiStatus("已保存到浏览器本地", true);
+    setApiStatus(`已保存 API 地址：${v}`, true);
   });
 
   document.getElementById("empSelect").addEventListener("change", () => {
     syncEmpInputsFromSelect();
   });
 
-  document.getElementById("refreshHistory").addEventListener("click", () => loadMyHistory().catch((e) => showToast(e.message, false)));
+  document.getElementById("refreshHistory").addEventListener("click", () =>
+    loadMyHistory().catch((e) => {
+      const empty = document.getElementById("historyEmpty");
+      empty.textContent = `加载失败：${e.message}`;
+      empty.classList.remove("hidden");
+      setApiStatus(`请求失败：${getApiBase()}`, false);
+      showToast(e.message, false);
+    })
+  );
 
   document.getElementById("refreshPending").addEventListener("click", () => loadPending().catch((e) => showToast(e.message, false)));
 
@@ -224,13 +261,14 @@ function wireEvents() {
       end_date: document.getElementById("endDate").value,
       reason: document.getElementById("reason").value,
     };
-    const att = document.getElementById("attachmentUrl").value.trim();
+    const attachmentInput = document.getElementById("attachmentUrl");
+    const att = attachmentInput ? attachmentInput.value.trim() : "";
     if (att) payload.attachment_url = att;
     try {
       await apiFetch("/leave-applications", { method: "POST", body: JSON.stringify(payload) });
       showToast("提交成功", true);
       document.getElementById("reason").value = "";
-      document.getElementById("attachmentUrl").value = "";
+      if (attachmentInput) attachmentInput.value = "";
       await Promise.all([loadMyHistory(), loadPending()]);
     } catch (e) {
       showToast(e.message || "提交失败", false);
@@ -262,7 +300,8 @@ async function pingHealth() {
 
 async function init() {
   const input = document.getElementById("apiBase");
-  input.value = localStorage.getItem(STORAGE_KEY) || "http://127.0.0.1:8000";
+  input.value = normalizeApiBase(localStorage.getItem(STORAGE_KEY) || DEFAULT_API_BASE);
+  localStorage.setItem(STORAGE_KEY, input.value);
 
   wireEvents();
 
@@ -272,6 +311,12 @@ async function init() {
     await Promise.all([loadMyHistory(), loadPending()]);
     showToast("数据已加载", true);
   } catch (e) {
+    const empSelect = document.getElementById("empSelect");
+    const historyEmpty = document.getElementById("historyEmpty");
+    empSelect.innerHTML = `<option value="">员工加载失败</option>`;
+    historyEmpty.textContent = `加载失败：${e.message}`;
+    historyEmpty.classList.remove("hidden");
+    setApiStatus(`连接失败，当前 API：${getApiBase()}`, false);
     showToast(e.message || "初始化失败：请确认 API 地址与后端服务", false);
   }
 }

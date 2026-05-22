@@ -5,6 +5,7 @@ uvicorn[standard]>=0.27
 # Database
 PyMySQL>=1.1.0
 SQLAlchemy>=2.0.0
+cryptography>=42.0.0
 
 # Config from environment
 python-dotenv>=1.0.0
