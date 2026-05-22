@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from typing import List, Optional
 
+from decimal import Decimal
+
 from sqlalchemy import Date, DateTime, ForeignKey, String, Time, UniqueConstraint, text
-from sqlalchemy.dialects.mysql import BIGINT, INTEGER
+from sqlalchemy.dialects.mysql import BIGINT, DECIMAL, INTEGER, TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -105,6 +107,10 @@ class Employee(Base):
         back_populates="manager", foreign_keys=[Department.manager_emp_id]
     )
     attendance_daily_rows: Mapped[List["AttendanceDaily"]] = relationship(back_populates="employee")
+    leave_applications: Mapped[List["LeaveApplication"]] = relationship(
+        back_populates="employee",
+        foreign_keys=lambda: [LeaveApplication.emp_id],
+    )
 
 
 class WorkShift(Base):
@@ -156,4 +162,50 @@ class AttendanceDaily(Base):
     employee: Mapped["Employee"] = relationship(back_populates="attendance_daily_rows")
     shift: Mapped[Optional["WorkShift"]] = relationship(
         back_populates="attendance_daily_rows", foreign_keys=[shift_id]
+    )
+
+
+class LeaveType(Base):
+    __tablename__ = "leave_type"
+
+    leave_type_id: Mapped[int] = mapped_column(UnsignedBigInt, primary_key=True, autoincrement=True)
+    type_code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    type_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    paid: Mapped[bool] = mapped_column(TINYINT(1), nullable=False, default=False)
+    max_days_per_year: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(5, 1), nullable=True)
+    need_attachment: Mapped[bool] = mapped_column(TINYINT(1), nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+    leave_applications: Mapped[List["LeaveApplication"]] = relationship(back_populates="leave_type")
+
+
+class LeaveApplication(Base):
+    __tablename__ = "leave_application"
+
+    application_id: Mapped[int] = mapped_column(UnsignedBigInt, primary_key=True, autoincrement=True)
+    emp_id: Mapped[int] = mapped_column(
+        UnsignedBigInt, ForeignKey("employee.emp_id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    leave_type_id: Mapped[int] = mapped_column(
+        UnsignedBigInt, ForeignKey("leave_type.leave_type_id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False
+    )
+    start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    reason: Mapped[str] = mapped_column(String(512), nullable=False)
+    attachment_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    approval_status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
+    approver_emp_id: Mapped[Optional[int]] = mapped_column(
+        UnsignedBigInt, ForeignKey("employee.emp_id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True
+    )
+    approval_remark: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    employee: Mapped["Employee"] = relationship(
+        back_populates="leave_applications",
+        foreign_keys=[emp_id],
+    )
+    leave_type: Mapped["LeaveType"] = relationship(back_populates="leave_applications")
+    approver: Mapped[Optional["Employee"]] = relationship(
+        foreign_keys=[approver_emp_id],
     )

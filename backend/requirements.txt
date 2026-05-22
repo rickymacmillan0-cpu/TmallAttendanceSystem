@@ -1,6 +1,6 @@
-# Web / API - uncomment when needed for the course
-# fastapi>=0.110
-# uvicorn[standard]>=0.27
+# Web / API
+fastapi>=0.110
+uvicorn[standard]>=0.27
 
 # Database
 PyMySQL>=1.1.0

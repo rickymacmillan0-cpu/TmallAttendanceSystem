@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>天猫员工请假管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["DM Sans", "system-ui", "sans-serif"],
+            },
+            colors: {
+              tmall: { 500: "#ff5000", 600: "#e64700" },
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-800 antialiased">
+    <header class="border-b border-slate-200/80 bg-white/90 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-widest text-tmall-500">Tmall Attendance</p>
+          <h1 class="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">天猫员工请假管理</h1>
+          <p class="mt-1 text-sm text-slate-500">纯静态前端 · 对接 FastAPI 后端</p>
+        </div>
+        <div class="flex flex-col gap-2 sm:items-end">
+          <label class="text-xs font-medium text-slate-500">API 根地址</label>
+          <div class="flex w-full max-w-md gap-2">
+            <input
+              id="apiBase"
+              type="url"
+              class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-tmall-500/30 focus:ring-2"
+              placeholder="http://127.0.0.1:8000"
+            />
+            <button
+              id="saveApiBase"
+              type="button"
+              class="shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+            >
+              保存
+            </button>
+          </div>
+          <p id="apiStatus" class="text-xs text-slate-400"></p>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl space-y-8 px-4 py-8">
+      <!-- Toast -->
+      <div
+        id="toast"
+        class="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center opacity-0 transition-opacity duration-200"
+        aria-live="polite"
+      ></div>
+
+      <div class="grid gap-8 lg:grid-cols-2">
+        <!-- 员工区域 -->
+        <section class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-900">员工区域</h2>
+              <p class="mt-1 text-sm text-slate-500">切换员工、提交申请、查看我的请假记录</p>
+            </div>
+            <span class="rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700">Employee</span>
+          </div>
+
+          <div class="mt-6 space-y-4">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label class="text-xs font-medium text-slate-600">当前员工 emp_id</label>
+                <select
+                  id="empSelect"
+                  class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30"
+                ></select>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-slate-600">或手动输入 emp_id</label>
+                <input
+                  id="empIdInput"
+                  type="number"
+                  min="1"
+                  class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30"
+                  placeholder="例如 1"
+                />
+              </div>
+            </div>
+            <p class="text-xs text-slate-400">提示：员工列表来自 <code class="rounded bg-slate-100 px-1">GET /employees</code></p>
+          </div>
+
+          <form id="leaveForm" class="mt-8 space-y-4 border-t border-slate-100 pt-8">
+            <h3 class="text-sm font-semibold text-slate-800">提交请假申请</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label class="text-xs font-medium text-slate-600">开始日期</label>
+                <input id="startDate" type="date" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30" />
+              </div>
+              <div>
+                <label class="text-xs font-medium text-slate-600">结束日期</label>
+                <input id="endDate" type="date" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30" />
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-600">请假类型</label>
+              <select id="leaveType" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30">
+                <option value="PL">事假 PL</option>
+                <option value="AL">年假 AL</option>
+                <option value="SL">病假 SL</option>
+                <option value="ML">婚假 ML</option>
+                <option value="OL">调休 OL</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-600">事由</label>
+              <textarea id="reason" rows="3" required maxlength="512" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30" placeholder="请简要说明请假原因"></textarea>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-600">附件 URL（可选）</label>
+              <input id="attachmentUrl" type="url" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-tmall-500/30" placeholder="https://..." />
+            </div>
+            <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-tmall-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-tmall-600 sm:w-auto">提交申请</button>
+          </form>
+
+          <div class="mt-10 border-t border-slate-100 pt-8">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h3 class="text-sm font-semibold text-slate-800">我的请假历史</h3>
+              <button id="refreshHistory" type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50">刷新列表</button>
+            </div>
+            <div class="mt-4 overflow-x-auto rounded-xl border border-slate-100">
+              <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+                <thead class="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th class="px-3 py-2 font-medium">单号</th>
+                    <th class="px-3 py-2 font-medium">类型</th>
+                    <th class="px-3 py-2 font-medium">起止</th>
+                    <th class="px-3 py-2 font-medium">状态</th>
+                  </tr>
+                </thead>
+                <tbody id="historyBody" class="divide-y divide-slate-100 bg-white"></tbody>
+              </table>
+            </div>
+            <p id="historyEmpty" class="mt-3 hidden text-center text-sm text-slate-400">暂无记录</p>
+          </div>
+        </section>
+
+        <!-- 主管区域 -->
+        <section class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-900">主管区域</h2>
+              <p class="mt-1 text-sm text-slate-500">查看待审批列表，同意或驳回</p>
+            </div>
+            <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">Manager</span>
+          </div>
+
+          <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div class="flex-1">
+              <label class="text-xs font-medium text-slate-600">部门筛选</label>
+              <select id="deptFilter" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/30">
+                <option value="">全公司待审批</option>
+              </select>
+            </div>
+            <button id="refreshPending" type="button" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">刷新待审</button>
+          </div>
+          <p class="mt-2 text-xs text-slate-400">数据来自 <code class="rounded bg-slate-100 px-1">GET /leave-applications?approval_status=PENDING</code>，选择部门时附加 <code class="rounded bg-slate-100 px-1">dept_id</code></p>
+
+          <div class="mt-6 overflow-x-auto rounded-xl border border-slate-100">
+            <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+              <thead class="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-3 py-2 font-medium">单号</th>
+                  <th class="px-3 py-2 font-medium">员工</th>
+                  <th class="px-3 py-2 font-medium">类型</th>
+                  <th class="px-3 py-2 font-medium">起止</th>
+                  <th class="px-3 py-2 font-medium">事由</th>
+                  <th class="px-3 py-2 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody id="pendingBody" class="divide-y divide-slate-100 bg-white"></tbody>
+            </table>
+          </div>
+          <p id="pendingEmpty" class="mt-3 hidden text-center text-sm text-slate-400">暂无待审批</p>
+        </section>
+      </div>
+
+      <footer class="pb-10 text-center text-xs text-slate-400">
+        打开本页前请先启动后端：<code class="rounded bg-slate-100 px-1">uvicorn app.main:app --reload</code>
+      </footer>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
